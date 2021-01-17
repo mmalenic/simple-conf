@@ -1,0 +1,125 @@
+use proc_macro::TokenStream;
+
+use proc_macro_error::abort_call_site;
+use syn::{Attribute, Data, DataStruct, Error, Expr, Field, Fields, Ident, Lit, LitBool, LitStr, Meta, MetaNameValue, NestedMeta, parse_macro_input, Token};
+use syn::DeriveInput;
+use syn::export::ToTokens;
+use syn::parse::{Parse, ParseBuffer, ParseStream};
+use syn::punctuated::Punctuated;
+use syn::spanned::Spanned;
+use syn::token::{Comma, Token};
+
+use crate::ConfigInputType::{Path, Serialized};
+
+enum ConfigInputType {
+    Path(Lit),
+    Serialized(Lit)
+}
+
+struct ConfigAttributes {
+    input: ConfigInputType,
+    serializer: Option<Lit>,
+    deserializer: Option<Lit>,
+    is_structopt_present: bool
+}
+
+impl ConfigAttributes {
+    fn new(attributes: &Vec<Attribute>) -> Self {
+        let name_values = parse_attribute(attributes, "from_config");
+        let [path, serialized, serializer, deserializer] = *parse_meta_to_lit(
+            name_values,
+            vec!("path", "serialized", "serializer", "deserializer")
+        );
+        let input = if let Some(lit) = path {
+            Path(lit)
+        } else if let Some(lit) = serialized {
+            Serialized(lit)
+        } else {
+            abort_call_site!("Expected either path or serialized argument.");
+        };
+
+        let struct_opt = parse_attribute(attributes, "StructOpt");
+        ConfigAttributes {
+            input,
+            serializer,
+            deserializer,
+            is_structopt_present: if struct_opt.is_empty() { false } else { true }
+        }
+    }
+}
+
+struct ConfigField {
+    name: Ident,
+    save: Option<Lit>
+}
+
+impl ConfigField {
+    fn new(field: &Field) -> Self {
+        let attribute = parse_attribute(&field.attrs, "from_config");
+        let [save] = *parse_meta_to_lit(
+            attribute,
+            vec!("save")
+        );
+        ConfigField {
+            name: field.ident.expect("Only named fields are supported."),
+            save
+        }
+    }
+}
+
+#[proc_macro_derive(StructOptConfig, attributes(from_config))]
+pub fn generate_options(input: TokenStream) -> TokenStream {
+    let derived_input = parse_macro_input!(input as DeriveInput);
+
+    let config_attributes= ConfigAttributes::new(&derived_input.attrs);
+    let fields = parse_fields(&derived_input.data);
+    let struct_name = derived_input.ident;
+}
+
+fn parse_fields(data: &Data) -> Vec<ConfigField> {
+    match data {
+        Data::Struct(data) => {
+            match &data.fields {
+                Fields::Named(fields) => &fields.named,
+                _ => abort_call_site!("Only named fields are supported.")
+            }
+        }
+        _ => abort_call_site!("Only structs are supported.")
+    }.iter().map(|field| ConfigField::new(field)).collect()
+}
+
+fn parse_attribute(input: &Vec<Attribute>, attribute: &str) -> Vec<MetaNameValue> {
+    input
+        .iter()
+        .filter(|attr| attr.path.is_ident(attribute))
+        .flat_map(|attr| match attr.parse_meta() {
+            Ok(meta) => match meta {
+                Meta::List(list) => list.nested,
+                _ => abort_call_site!("Expected MetaList")
+            }
+            _ => abort_call_site!("Expected Meta")
+        })
+        .map(|nested_meta| match nested_meta {
+            NestedMeta::Meta(meta) => match meta {
+                Meta::NameValue(name_value) => name_value,
+                _ => abort_call_site!("Expected NameValue Meta")
+            }
+            _ => abort_call_site!("Expected Meta")
+        })
+        .collect()
+}
+
+fn parse_meta_to_lit(name_values: Vec<MetaNameValue>, search_for: Vec<&str>) -> &[Option<Lit>] {
+    if name_values.len() > search_for.len() {
+        abort_call_site!("Too many arguments.");
+    }
+
+    let mut lit_options: Vec<Option<Lit>> = vec![None; search_for.len()];
+    for value in name_values {
+        let value_name = &*value.path.get_ident().expect("Expected Path as Ident.").to_string();
+        let position = search_for.iter().position(|&e| e.eq(value_name)).expect("Unsupported argument.");
+        lit_options.get_mut(position).unwrap().replace(value.lit);
+    }
+    &lit_options[..]
+}
+

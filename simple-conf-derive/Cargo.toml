@@ -1,0 +1,14 @@
+[package]
+name = "simple-sync-derive"
+version = "0.1.0"
+authors = ["Marko Malenic <mmalenic1@gmail.com>"]
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+syn = { version = "1.0.57", features = ["full"] }
+proc-macro-error = "1.0.4"
+
+[lib]
+proc-macro = true

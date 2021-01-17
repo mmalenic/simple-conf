@@ -1,0 +1,2 @@
+[workspace]
+members = ["simple-conf", "simple-conf-derive"]
