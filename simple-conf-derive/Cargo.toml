@@ -9,6 +9,7 @@ edition = "2018"
 [dependencies]
 syn = { version = "1.0.57", features = ["full"] }
 proc-macro-error = "1.0.4"
+itertools = "0.10.0"
 
 [lib]
 proc-macro = true
