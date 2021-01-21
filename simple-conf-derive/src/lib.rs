@@ -4,6 +4,7 @@ use syn::{Attribute, Data, Field, Fields, Ident, Lit, Meta, MetaNameValue, Neste
 
 use crate::ConfigInputType::{Path, Serialized};
 use proc_macro::TokenStream;
+use quote::quote;
 
 enum ConfigInputType {
     Path(Lit),
@@ -70,6 +71,31 @@ pub fn generate_options(input: TokenStream) -> TokenStream {
     let config_attributes= ConfigAttributes::new(&derived_input.attrs);
     let fields = parse_fields(derived_input.data);
     let struct_name = derived_input.ident;
+
+    let serde_struct = quote! {
+        struct __SimpleConfSerdeInternal {
+
+        }
+    };
+    let implementation = quote! {
+        impl ::simple_conf::SimpleConf for #struct_name {
+            fn from_serialized(serialized: &str) -> Self {
+
+            }
+
+            fn from_path(path: &Path) -> Self {
+
+            }
+
+            fn to_serialized(&self) -> &str {
+
+            }
+
+            fn to_path(&self, path: &Path) {
+
+            }
+        }
+    };
 }
 
 fn parse_fields(data: Data) -> Vec<ConfigField> {
